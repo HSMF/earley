@@ -1,0 +1,12 @@
+
+(env
+ (dev
+  (flags
+   (:standard -warn-error -A -no-strict-formats -g)))
+
+ (release
+  (flags
+   (:standard -warn-error -A -no-strict-formats -g)))
+
+ )
+

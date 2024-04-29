@@ -1,0 +1,4 @@
+(executable
+ (public_name earley)
+ (name main)
+ (libraries Lib))
