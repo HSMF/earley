@@ -1,7 +1,7 @@
 open Lib
 open Printf
 
-let input : input = "2 + 3 * 1" |> String.split_on_char ' '
+let input : input = "2 + 3 * 1 + 1 * 2 * 1" |> String.split_on_char ' '
 let entry = "P"
 let entry_expansion = List.assoc entry my_grammar |> List.rev
 let goal = PrsProduction ((Known 0, Known (List.length input)), entry, entry_expansion, [])

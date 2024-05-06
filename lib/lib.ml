@@ -133,7 +133,10 @@ let rec string_of_proof_rule : proof_rule -> string = function
       r
       (sl latex_of_token " " expansion)
   | AxiomToken ((i, _), tok) ->
-    sp {|\axiominf{\ensuremath{x_{%d}} = `%s`}{\texttt{src}}|} (assert_known i) tok
+    sp
+      {|\axiominf{\ensuremath{x_{%d}} = %s}{\texttt{src}}|}
+      (assert_known i)
+      (latex_of_token (Term tok))
   | Pred (item, rule) ->
     sp
       {|\uninf{%s}{\texttt{Pred}}{
@@ -173,14 +176,13 @@ let string_of_proof (_, proof) =
     \newenvironment{bprooftree}
   {\leavevmode\hbox\bgroup}
   {\DisplayProof\egroup}
-    \begin{inctext}[left border=100pt, right border=20pt,top border=30pt, bottom border=30pt]
-    \hspace*{-1.5in}
-    \vspace*{-15in}
+    \begin{inctext}[left border=20pt, right border=20pt,top border=30pt, bottom border=30pt]
     \begin{bprooftree}
     |}
   in
   let postlude = {|
     \end{bprooftree}
+
     \end{inctext}
     \end{document} |} in
   prelude ^ string_of_proof_rule proof ^ postlude
