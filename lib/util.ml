@@ -96,4 +96,9 @@ module Option = struct
   let unwrap ?(exn = Failure "Unwrapped a None value") = function
     | None -> raise exn
     | Some x -> x
+
+
+  let then_some bool value = if bool then Some value else None
 end
+
+let rec indent depth ?(s = "  ") = if depth = 0 then "" else s ^ indent (depth - 1) ~s
