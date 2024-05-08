@@ -1,33 +1,10 @@
-use std::{fs::File, process::Command};
+use std::{
+    fs::File,
+    process::{Command, Stdio},
+};
 
-use v2::{nt, t, Grammar, Table};
+use earley::{nt, t, Grammar, Table};
 
-mod v1;
-mod v2;
-
-fn _main() {
-    use v1::*;
-    let grammar = Grammar::new(
-        [
-            ("S".to_owned(), vec![vec![t("a"), nt("A")]]),
-            (
-                "A".to_owned(),
-                vec![vec![t("a"), nt("A"), nt("B")], vec![t("b")]],
-            ),
-            ("B".to_owned(), vec![vec![t("b")]]),
-        ]
-        .into_iter()
-        .collect(),
-    );
-
-    let input = "aaabbb".chars().map(|x| x.to_string()).collect::<Vec<_>>();
-    let mut table = Table::new(grammar);
-
-    let mut should_die = false;
-    while !should_die {
-        should_die = table.next(&input);
-    }
-}
 fn main() -> anyhow::Result<()> {
     let mut grammar = Grammar::new();
     grammar.add_prod("S", [t("a"), nt("A")]);
@@ -44,10 +21,13 @@ fn main() -> anyhow::Result<()> {
     let mut f = File::create("target/output.tex")?;
     write!(f, "{proof}")?;
 
+    eprintln!("running pdflatex to compile parse tree");
     Command::new("pdflatex")
         .args(["-output-directory=target", "target/output.tex"])
+        .stdout(Stdio::null())
         .spawn()?
         .wait()?;
+    eprintln!("there should now be a pdf at ./target/output.pdf");
 
     Ok(())
 }

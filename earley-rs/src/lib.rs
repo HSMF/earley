@@ -102,6 +102,12 @@ impl Grammar {
     }
 }
 
+impl Default for Grammar {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub struct Table<I> {
     table: Vec<HashSet<Item>>,
     grammar: Grammar,
@@ -297,7 +303,6 @@ where
         match root.before.last() {
             None => Proof::Pred(root),
             Some(t @ Token::Term(_)) => {
-                dbg!(&root, &self.table[j - 1]);
                 let mu = &root.before[..root.before.len().saturating_sub(1)];
                 let child = self.table[j - 1]
                     .iter()
