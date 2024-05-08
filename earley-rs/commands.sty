@@ -1,0 +1,41 @@
+
+\ProvidesPackage{commands}
+\usepackage{amsmath}
+\usepackage{bussproofs}
+\usepackage{incgraph}
+\usepackage{amssymb}
+\usepackage{amsfonts}
+\usepackage{tipa}
+\newenvironment{bprooftree}
+{\leavevmode\hbox\bgroup}
+{\DisplayProof\egroup}
+
+\newcommand{\abs}[1]{\left|#1\right|}
+\newcommand{\set}[1]{\left\{#1\right\}}
+\newcommand{\Follows}{\Longrightarrow\ }
+\newcommand{\ceil}[1]{\left\lceil #1 \right\rceil }
+
+\newcommand{\pred}{\texttt{Pred}}
+\newcommand{\scan}{\texttt{Scan}}
+\newcommand{\comp}{\texttt{Comp}}
+
+\newcommand{\mymatrix}[1]{\begin{pmatrix} #1 \end{pmatrix}}
+\newcommand{\ipa}[1]{\text{\textipa{#1}}}
+
+\newcommand{\axiominf}[2]{\AxiomC{}\RightLabel{#2}\UnaryInfC{#1}}
+\newcommand{\uninf}[3]{#3 \RightLabel{#2}\UnaryInfC{#1}}
+\newcommand{\bininf}[4]{#3 #4 \RightLabel{#2}\BinaryInfC{#1}}
+\newcommand{\terninf}[5]{#3 #4 #5 \RightLabel{#2}\TrinaryInfC{#1}}
+
+
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\Z}{\mathbb{Z}}
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\Q}{\mathbb{Q}}
+\newcommand{\C}{\mathbb{C}}
+\newcommand{\I}{\mathbb{I}}
+\newcommand{\T}{\mathbb{T}}
+\newcommand{\W}{\mathbb{W}}
+
+\newcommand{\A}{\mathcal{A}}
