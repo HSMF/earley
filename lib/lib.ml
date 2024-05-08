@@ -169,7 +169,7 @@ let rec string_of_proof_rule : proof_rule -> string = function
 
 let string_of_proof (_, proof) =
   let prelude =
-    {|\documentclass{article}\usepackage{bussproofs}\usepackage{hyde}
+    {|\documentclass{article}\usepackage{bussproofs}\usepackage{cmds}
 \usepackage{incgraph}
 \begin{document}
 
