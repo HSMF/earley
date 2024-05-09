@@ -6,3 +6,5 @@
 cargo run
 ```
 
+Currently you will have to edit [`src/main.rs`](./src/main.rs) to change the grammar
+
