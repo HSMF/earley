@@ -12,3 +12,4 @@ path = "src/main.rs"
 [dependencies]
 anyhow = "1.0.83"
 itertools = "0.12.1"
+thiserror = "1.0.60"

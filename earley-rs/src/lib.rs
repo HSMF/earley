@@ -151,7 +151,17 @@ pub struct Table<I> {
     table: Vec<HashMap<Item, InsertedBy>>,
     grammar: Grammar,
     input: I,
+    initial: String,
 }
+
+pub struct ParseInfo {
+    table: Vec<HashMap<Item, InsertedBy>>,
+    initial: String,
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("oops")]
+pub struct Error;
 
 impl<I> Table<I>
 where
@@ -181,14 +191,20 @@ where
             table,
             grammar,
             input,
+            initial: initial.as_ref().to_owned(),
         };
         let initials = out.pred_phase(0, initials);
-        for it in initials.keys() {
-            println!("inserting at 0: {it}");
-        }
-        println!();
         out.table.push(initials);
         out
+    }
+
+    pub fn print_table(&self) {
+        for (j, el) in self.table.iter().enumerate() {
+            for it in el.keys() {
+                println!("inserting at {j}: {it}");
+            }
+            println!();
+        }
     }
 
     fn scan_phase(&mut self, j: usize, token: String) -> HashMap<Item, InsertedBy> {
@@ -290,7 +306,6 @@ where
             let added = self.pred_phase_loop(j, &cur_state);
             let mut num_added = 0;
             for (add, inserted_by) in added {
-                println!("predict{j}: add {add}");
                 num_added += cur_state.insert(add, inserted_by).is_none() as usize;
             }
 
@@ -348,35 +363,31 @@ where
         // pred
         let cur_state = self.pred_phase(j, cur_state);
 
-        // report the table
-        for it in cur_state.keys() {
-            println!("inserting at {j}: {it}");
-        }
-        println!("{j}");
-
         self.table.push(cur_state)
     }
 
-    pub fn parse(&mut self) {
+    pub fn parse(mut self) -> Result<ParseInfo, Error> {
         while let Some(token) = self.input.next() {
             self.next(token)
         }
-    }
 
-    pub fn reconstruct(&self, initial: impl AsRef<str>) -> latex::FullProof {
-        let initial = initial.as_ref();
-        let root = self
+        let initial = self.initial.as_ref();
+
+        let _ = self
             .table
             .last()
             .unwrap()
             .iter()
             .find(|(item, _)| item.name == initial && item.after.is_empty())
-            .expect("parse had failed. if you see this you may complain about this horrid api");
-
-        let proof = self.reconstruct_tree(self.table.len() - 1, root.0, root.1);
-        latex::FullProof(proof)
+            .ok_or(Error)?;
+        Ok(ParseInfo {
+            table: self.table,
+            initial: self.initial,
+        })
     }
+}
 
+impl ParseInfo {
     fn reconstruct_tree<'a>(
         &'a self,
         j: usize,
@@ -423,6 +434,20 @@ where
                 Proof::Comp(root, Box::new(proof_mu), Box::new(proof_b))
             }
         }
+    }
+
+    pub fn reconstruct(&self) -> latex::FullProof {
+        let initial = self.initial.as_ref();
+        let root = self
+            .table
+            .last()
+            .unwrap()
+            .iter()
+            .find(|(item, _)| item.name == initial && item.after.is_empty())
+            .expect("parse had failed. if you see this you may complain about this horrid api");
+
+        let proof = self.reconstruct_tree(self.table.len() - 1, root.0, root.1);
+        latex::FullProof(proof)
     }
 }
 
