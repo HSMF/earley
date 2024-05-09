@@ -22,7 +22,7 @@ fn main() -> anyhow::Result<()> {
     grammar.add_prod("digit", [t("9")]);
     grammar.add_prod("digit", [t("0")]);
 
-    let mut table = Table::new(grammar, "S", "21+29+73".chars().map(|x| x.to_string()));
+    let mut table = Table::new(grammar.clone(), "S", "21+29+73".chars().map(|x| x.to_string()));
     table.parse();
 
     let proof = table.reconstruct("S");
@@ -38,6 +38,7 @@ fn main() -> anyhow::Result<()> {
                 \begin{{document}}
     "#
     )?;
+    write!(f, "{}", grammar.latex())?;
     write!(f, "{proof}")?;
     let tree = FullParseTree::from(proof);
     write!(f, "{tree}")?;

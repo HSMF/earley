@@ -112,6 +112,10 @@ impl Grammar {
         let entry = self.productions.entry(nonterm).or_default();
         entry.push(expansion);
     }
+
+    pub fn latex(&self) -> latex::Grammar {
+        latex::Grammar(self)
+    }
 }
 
 impl Default for Grammar {
@@ -601,6 +605,35 @@ pub mod latex {
                 "#,
                 body = self.0
             )
+        }
+    }
+
+    pub struct Grammar<'a>(pub(super) &'a super::Grammar);
+    impl Display for Grammar<'_> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            writeln!(
+                f,
+                r#"
+                \begin{{inctext}}[left border=20pt, right border=20pt,top border=30pt, bottom border=30pt]
+                "#,
+            )?;
+            // writeln!(f, r"\section*{{Grammar}}")?;
+            writeln!(f, r"\begin{{lstlisting}}")?;
+
+            for (rule, productions) in &self.0.productions {
+                for production in productions {
+                    writeln!(f, r"{rule} -> {}", production.iter().format(" "))?;
+                }
+            }
+
+            writeln!(f, r"\end{{lstlisting}}")?;
+            writeln!(
+                f,
+                r#"
+                \end{{inctext}}"#
+            )?;
+
+            Ok(())
         }
     }
 }
