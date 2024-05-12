@@ -6,7 +6,7 @@ use self::latex::Proof;
 
 pub mod latex;
 mod table;
-pub use table::Table;
+use table::Table;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum Token<T> {
@@ -155,7 +155,101 @@ where
     }
 }
 
-// pub struct PrefixParser<T> {}
+/// Prefix Parser, can incrementally parse a string
+///
+/// - Use [PrefixParser::try_next] to advance the parser by a single token
+/// - Use [PrefixParser::finish] to attempt to finish parsing
+///
+/// - Trying to push an illegal token can be recovered from.
+/// - Trying to finish in an illegal state can be recovered from.
+///
+///
+/// # Examples
+///
+/// Consider the grammar `S ::= SS | (S) | ()`
+///
+/// ```
+/// # use earley::*;
+/// # let mut grammar = Grammar::new();
+/// # fn t(c: char) -> Token<char> {
+/// #     Token::Term(c)
+/// # }
+/// # fn nt(c: impl ToString) -> Token<char> {
+/// #     Token::NonTerm(c.to_string())
+/// # }
+/// # grammar.add_prod("S", [nt("S"), nt("S")]);
+/// # grammar.add_prod("S", [t('('), nt("S"), t(')')]);
+/// # grammar.add_prod("S", [t('('), t(')')]);
+/// let mut parser = PrefixParser::new(grammar, "S");
+///
+/// // currently parsed: ""
+/// assert!(parser.try_next('(').is_ok());
+/// // currently parsed: "("
+/// assert!(parser.try_next('(').is_ok());
+/// // currently parsed: "(("
+/// assert!(parser.try_next(')').is_ok());
+/// // currently parsed: "(()"
+/// assert!(parser.try_next(')').is_ok());
+/// // currently parsed: "(())"
+/// assert!(parser.try_next(')').is_err());
+/// // currently parsed: "(())", notice how the currently parsed state did not change
+///
+/// assert!(parser.try_next('(').is_ok());
+/// // currently parsed: "(())("
+///
+/// assert!(parser.finish().is_err()); // we still expect to close the parenthesis
+///
+/// assert!(parser.try_next(')').is_ok());
+/// // currently parsed: "(())()"
+///
+/// assert!(parser.finish().is_ok()); // we now have a fully parsed string
+/// ```
+pub struct PrefixParser<T> {
+    table: Table<T>,
+}
+
+impl<T> PrefixParser<T>
+where
+    T: Clone + Eq + std::hash::Hash + Display,
+{
+    /// constructs a new [PrefixParser] for the given grammar, with the initial state
+    pub fn new(grammar: Grammar<T>, initial: impl AsRef<str>) -> Self {
+        let table = Table::new(grammar, initial, 0);
+        Self { table }
+    }
+
+    /// Attempts to advance the state
+    pub fn try_next(&mut self, token: T) -> Result<(), Error> {
+        self.table.next(token);
+        if self.table.table.last().unwrap().is_empty() {
+            self.table.table.pop();
+            return Err(Error);
+        }
+        Ok(())
+    }
+
+    pub fn finish(&self) -> Result<ParseInfo<T>, Error> {
+        let initial = &self.table.initial;
+
+        let _ = self
+            .table
+            .table
+            .last()
+            .unwrap()
+            .iter()
+            .find(|(item, _)| {
+                item.name() == initial
+                    && item.after().is_empty()
+                    && item.range() == &(0..self.table.table.len() - 1)
+            })
+            .ok_or(Error)?;
+
+        Ok(ParseInfo {
+            table: self.table.table.clone(),
+            initial: self.table.initial.clone(),
+        })
+    }
+}
 
 pub struct ParseInfo<T> {
     table: Vec<HashMap<Item<T>, InsertedBy>>,

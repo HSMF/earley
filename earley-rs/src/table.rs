@@ -126,6 +126,7 @@ where
         out
     }
 
+    #[allow(dead_code)]
     pub fn print_table(&self) {
         for (j, el) in self.table.iter().enumerate() {
             for it in el.keys() {

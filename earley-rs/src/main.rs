@@ -1,8 +1,43 @@
 use std::{fs::File, process::Command};
 
-use earley::{latex::FullParseTree, Grammar, Parser, Token};
+use earley::{latex::FullParseTree, Grammar, Parser, PrefixParser, Token};
+
+fn tmp() -> anyhow::Result<()> {
+    fn t(c: char) -> Token<char> {
+        Token::Term(c)
+    }
+    fn nt(c: impl ToString) -> Token<char> {
+        Token::NonTerm(c.to_string())
+    }
+
+    const S: &str = "S";
+    let mut grammar = Grammar::new();
+    grammar.add_prod(S, [nt(S), nt(S)]);
+    grammar.add_prod(S, [t('('), nt(S), t(')')]);
+    grammar.add_prod(S, [t('('), t(')')]);
+
+    let mut parser = PrefixParser::new(grammar, "S");
+
+    let mut parsed = String::new();
+    for line in std::io::stdin().lines() {
+        let line = line?;
+        let ch = line.chars().next().unwrap();
+        if let Ok(()) = parser.try_next(ch) {
+            parsed.push(ch);
+            println!("parse success");
+        } else {
+            println!("parse error")
+        }
+
+        println!("currently parsing {parsed:?}");
+    }
+
+    Ok(())
+}
 
 fn main() -> anyhow::Result<()> {
+    tmp()?;
+    panic!();
     let mut grammar = Grammar::new();
 
     fn t(c: char) -> Token<char> {
