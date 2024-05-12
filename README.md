@@ -5,6 +5,8 @@
 - [the caml directory](./caml/) contains a some naive OCaml code that implements an earley parser, badly
 - [the earley-rs directory](./earley-rs/) contains a Rust rewrite, which is naturally better
 
+Python bindings are available in the rust implementation
+
 
 ## Running - OCaml
 
