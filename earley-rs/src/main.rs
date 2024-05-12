@@ -1,29 +1,36 @@
 use std::{fs::File, process::Command};
 
-use earley::{latex::FullParseTree, nt, t, Grammar, Table};
+use earley::{latex::FullParseTree, Grammar, Parser, Token};
 
 fn main() -> anyhow::Result<()> {
     let mut grammar = Grammar::new();
 
+    fn t(c: char) -> Token<char> {
+        Token::Term(c)
+    }
+    fn nt(c: impl ToString) -> Token<char> {
+        Token::NonTerm(c.to_string())
+    }
+
     grammar.add_prod("S", [nt("M")]);
-    grammar.add_prod("M", [nt("M"), t("+"), nt("M")]);
+    grammar.add_prod("M", [nt("M"), t('+'), nt("M")]);
     grammar.add_prod("M", [nt("num")]);
 
     grammar.add_prod("num", [nt("digit")]);
     grammar.add_prod("num", [nt("digit"), nt("num")]);
-    grammar.add_prod("digit", [t("1")]);
-    grammar.add_prod("digit", [t("2")]);
-    grammar.add_prod("digit", [t("3")]);
-    grammar.add_prod("digit", [t("4")]);
-    grammar.add_prod("digit", [t("5")]);
-    grammar.add_prod("digit", [t("6")]);
-    grammar.add_prod("digit", [t("7")]);
-    grammar.add_prod("digit", [t("8")]);
-    grammar.add_prod("digit", [t("9")]);
-    grammar.add_prod("digit", [t("0")]);
+    grammar.add_prod("digit", [t('1')]);
+    grammar.add_prod("digit", [t('2')]);
+    grammar.add_prod("digit", [t('3')]);
+    grammar.add_prod("digit", [t('4')]);
+    grammar.add_prod("digit", [t('5')]);
+    grammar.add_prod("digit", [t('6')]);
+    grammar.add_prod("digit", [t('7')]);
+    grammar.add_prod("digit", [t('8')]);
+    grammar.add_prod("digit", [t('9')]);
+    grammar.add_prod("digit", [t('0')]);
 
-    let table = Table::new(grammar.clone(), "S", "21+29+73+912+1".chars().map(|x| x.to_string()));
-    let parse_result = table.parse()?;
+    let parser = Parser::new("((((())))))".chars(), grammar.to_owned(), "S");
+    let parse_result = parser.parse()?;
 
     let proof = parse_result.reconstruct();
     use std::io::Write;

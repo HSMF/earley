@@ -1,15 +1,20 @@
 use std::{collections::HashMap, fmt::Display};
 
-use itertools::Itertools;
+use table::Item;
 
 use self::latex::Proof;
 
+pub mod latex;
+mod table;
+pub use table::Table;
+
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub enum Token {
-    Term(String),
+pub enum Token<T> {
+    Term(T),
     NonTerm(String),
 }
-impl Token {
+
+impl<T> Token<T> {
     fn nonterm(&self) -> &str {
         match self {
             Token::NonTerm(s) => s,
@@ -17,7 +22,7 @@ impl Token {
         }
     }
 
-    fn term(&self) -> &str {
+    fn term(&self) -> &T {
         match self {
             Token::Term(s) => s,
             _ => panic!(),
@@ -25,7 +30,10 @@ impl Token {
     }
 }
 
-impl Display for Token {
+impl<T> Display for Token<T>
+where
+    T: Display,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Token::Term(t) => write!(f, "`{t}`"),
@@ -34,91 +42,44 @@ impl Display for Token {
     }
 }
 
-pub fn t(s: &str) -> Token {
+pub fn t(s: impl ToString) -> Token<String> {
     Token::Term(s.to_string())
 }
-pub fn nt(s: &str) -> Token {
+pub fn nt(s: impl ToString) -> Token<String> {
     Token::NonTerm(s.to_string())
 }
 
 pub type Range = std::ops::Range<usize>;
 
-#[derive(Clone, Hash, PartialEq, Eq)]
-struct Item {
-    range: Range,
-    name: String,
-    before: Vec<Token>,
-    /// After is stored in reverse order for efficient pushing
-    ///
-    /// using a deque is boring
-    after: Vec<Token>,
-}
-
-impl std::fmt::Debug for Item {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Item{self}")
-    }
-}
-
-impl Display for Item {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let Item {
-            range,
-            name,
-            before,
-            after,
-        } = self;
-        {
-            write!(
-                f,
-                "[{}, {}, {name} -> {} . {}]",
-                range.start,
-                range.end,
-                before.iter().format(" "),
-                after.iter().rev().format(" ")
-            )?;
-        }
-        Ok(())
-    }
-}
-
-impl Item {
-    pub fn init(name: String, mut after: Vec<Token>, range: Range) -> Self {
-        after.reverse();
-        Self {
-            range,
-            name,
-            before: Vec::new(),
-            after,
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
-pub struct Grammar {
-    productions: HashMap<String, Vec<Vec<Token>>>,
+pub struct Grammar<T> {
+    productions: HashMap<String, Vec<Vec<Token<T>>>>,
 }
 
-impl Grammar {
+impl<T> Grammar<T> {
     pub fn new() -> Self {
         Self {
             productions: HashMap::new(),
         }
     }
 
-    pub fn add_prod(&mut self, nonterm: impl ToString, expansion: impl IntoIterator<Item = Token>) {
+    pub fn add_prod(
+        &mut self,
+        nonterm: impl ToString,
+        expansion: impl IntoIterator<Item = Token<T>>,
+    ) {
         let nonterm = nonterm.to_string();
         let expansion = expansion.into_iter().collect();
         let entry = self.productions.entry(nonterm).or_default();
         entry.push(expansion);
     }
 
-    pub fn latex(&self) -> latex::Grammar {
+    pub fn latex(&self) -> latex::Grammar<T> {
         latex::Grammar(self)
     }
 }
 
-impl Default for Grammar {
+impl<T> Default for Grammar<T> {
     fn default() -> Self {
         Self::new()
     }
@@ -147,15 +108,57 @@ impl InsertedBy {
     }
 }
 
-pub struct Table<I> {
-    table: Vec<HashMap<Item, InsertedBy>>,
-    grammar: Grammar,
+pub struct Parser<T, I> {
     input: I,
-    initial: String,
+    table: Table<T>,
 }
 
-pub struct ParseInfo {
-    table: Vec<HashMap<Item, InsertedBy>>,
+impl<T, I> Parser<T, I>
+where
+    I: Iterator<Item = T>,
+    T: Clone + Eq + std::hash::Hash + Display,
+{
+    pub fn new(
+        input: impl IntoIterator<IntoIter = I>,
+        grammar: Grammar<T>,
+        initial: impl AsRef<str>,
+    ) -> Self {
+        let input = input.into_iter();
+        let table = Table::new(grammar, initial, input.size_hint().0);
+        Self { input, table }
+    }
+    pub fn parse(mut self) -> Result<ParseInfo<T>, Error> {
+        for token in self.input.by_ref() {
+            // println!("{token}");
+            self.table.next(token)
+        }
+        // self.table.print_table();
+
+        let initial = &self.table.initial;
+
+        let _ = self
+            .table
+            .table
+            .last()
+            .unwrap()
+            .iter()
+            .find(|(item, _)| {
+                item.name() == initial
+                    && item.after().is_empty()
+                    && item.range() == &(0..self.table.table.len() - 1)
+            })
+            .ok_or(Error)?;
+        Ok(ParseInfo {
+            table: self.table.table,
+            initial: self.table.initial,
+        })
+    }
+}
+
+// pub struct PrefixParser<T> {}
+
+pub struct ParseInfo<T> {
+    table: Vec<HashMap<Item<T>, InsertedBy>>,
     initial: String,
 }
 
@@ -163,238 +166,17 @@ pub struct ParseInfo {
 #[error("oops")]
 pub struct Error;
 
-impl<I> Table<I>
+impl<T> ParseInfo<T>
 where
-    I: Iterator<Item = String>,
+    T: PartialEq + Display,
 {
-    pub fn new(
-        grammar: Grammar,
-        initial: impl AsRef<str>,
-        input: impl IntoIterator<IntoIter = I>,
-    ) -> Self {
-        let initials = grammar
-            .productions
-            .get(initial.as_ref())
-            .expect("grammar must contain initial")
-            .iter()
-            .cloned()
-            .map(|x| {
-                (
-                    Item::init(initial.as_ref().to_owned(), x, 0..0),
-                    InsertedBy::Pred,
-                )
-            })
-            .collect();
-        let input = input.into_iter();
-        let table = Vec::with_capacity(input.size_hint().0);
-        let mut out = Table {
-            table,
-            grammar,
-            input,
-            initial: initial.as_ref().to_owned(),
-        };
-        let initials = out.pred_phase(0, initials);
-        out.table.push(initials);
-        out
-    }
-
-    pub fn print_table(&self) {
-        for (j, el) in self.table.iter().enumerate() {
-            for it in el.keys() {
-                println!("inserting at {j}: {it}");
-            }
-            println!();
-        }
-    }
-
-    fn scan_phase(&mut self, j: usize, token: String) -> HashMap<Item, InsertedBy> {
-        let mut cur_state = HashMap::new();
-
-        let prev_state = &self.table[j - 1];
-        let token = Token::Term(token);
-
-        for i in prev_state.keys() {
-            if i.after.last() != Some(&token) {
-                continue;
-            }
-            let range = i.range.start..i.range.end + 1;
-            let mut before = i.before.clone();
-            let mut after = i.after.clone();
-            before.push(after.pop().unwrap());
-            cur_state.insert(
-                Item {
-                    before,
-                    after,
-                    range,
-                    name: i.name.clone(),
-                },
-                InsertedBy::Scan(i.range.clone()),
-            );
-        }
-
-        cur_state
-    }
-
-    fn comp_phase_loop(
-        &mut self,
-        _: usize,
-        cur_state: &HashMap<Item, InsertedBy>,
-    ) -> Vec<(Item, InsertedBy)> {
-        let mut added = vec![];
-        for (item, _) in cur_state.iter() {
-            let Item {
-                range: right_range,
-                name,
-                after,
-                ..
-            } = item;
-            if !after.is_empty() {
-                continue;
-            }
-            let right_rule = Token::NonTerm(name.clone());
-            let left_proofs = &self.table[right_range.start];
-            for (candidate, _) in left_proofs.iter() {
-                let Item {
-                    range: left_range,
-                    name,
-                    mut before,
-                    mut after,
-                } = candidate.clone();
-                if after.last() != Some(&right_rule) {
-                    continue;
-                }
-                before.push(after.pop().unwrap());
-                let to_add = Item {
-                    range: left_range.start..right_range.end,
-                    name,
-                    before,
-                    after,
-                };
-                if cur_state.contains_key(&to_add) {
-                    continue;
-                }
-                added.push((to_add, InsertedBy::Comp(left_range, right_range.to_owned())));
-            }
-        }
-
-        added
-    }
-
-    fn comp_phase(
-        &mut self,
-        j: usize,
-        mut cur_state: HashMap<Item, InsertedBy>,
-    ) -> HashMap<Item, InsertedBy> {
-        loop {
-            let added = self.comp_phase_loop(j, &cur_state);
-            if added.is_empty() {
-                break;
-            }
-            for (add, inserted_by) in added {
-                cur_state.insert(add, inserted_by);
-            }
-        }
-        cur_state
-    }
-
-    fn pred_phase(
-        &mut self,
-        j: usize,
-        mut cur_state: HashMap<Item, InsertedBy>,
-    ) -> HashMap<Item, InsertedBy> {
-        loop {
-            let added = self.pred_phase_loop(j, &cur_state);
-            let mut num_added = 0;
-            for (add, inserted_by) in added {
-                num_added += cur_state.insert(add, inserted_by).is_none() as usize;
-            }
-
-            if num_added == 0 {
-                break;
-            }
-        }
-        cur_state
-    }
-
-    fn pred_phase_loop(
-        &mut self,
-        j: usize,
-        cur_state: &HashMap<Item, InsertedBy>,
-    ) -> Vec<(Item, InsertedBy)> {
-        let mut added = vec![];
-
-        for (item, _) in cur_state.iter() {
-            let Some(Token::NonTerm(prediction)) = item.after.last() else {
-                continue;
-            };
-            let productions = self
-                .grammar
-                .productions
-                .get(prediction)
-                .expect("grammar must contain nonterminal");
-            for i in productions {
-                let to_add = Item::init(prediction.clone(), i.clone(), j..j);
-                if cur_state.contains_key(&to_add) {
-                    continue;
-                }
-                added.push((to_add.clone(), InsertedBy::Pred));
-            }
-        }
-
-        added
-    }
-
-    fn next(&mut self, token: String) {
-        let j = self.table.len();
-
-        // # phase 1 : scan
-        // use axiom j-1,j,i[j-1] to advance in state j-1
-        // -> keep advanced (scan)
-        let cur_state = self.scan_phase(j, token);
-
-        // # phase 2: comp
-        // for all item completed
-        //   comp with item
-        // if added some
-        //   restart phase 2
-        let cur_state = self.comp_phase(j, cur_state);
-
-        // phase 3:
-        // pred
-        let cur_state = self.pred_phase(j, cur_state);
-
-        self.table.push(cur_state)
-    }
-
-    pub fn parse(mut self) -> Result<ParseInfo, Error> {
-        while let Some(token) = self.input.next() {
-            self.next(token)
-        }
-
-        let initial = self.initial.as_ref();
-
-        let _ = self
-            .table
-            .last()
-            .unwrap()
-            .iter()
-            .find(|(item, _)| item.name == initial && item.after.is_empty())
-            .ok_or(Error)?;
-        Ok(ParseInfo {
-            table: self.table,
-            initial: self.initial,
-        })
-    }
-}
-
-impl ParseInfo {
     fn reconstruct_tree<'a>(
         &'a self,
         j: usize,
-        root: &'a Item,
+        root: &'a Item<T>,
         inserted_by: &InsertedBy,
-    ) -> latex::Proof<'a> {
-        match root.before.last() {
+    ) -> latex::Proof<'a, T> {
+        match root.before().last() {
             None => {
                 assert!(matches!(inserted_by, InsertedBy::Pred));
                 Proof::Pred(root)
@@ -402,11 +184,11 @@ impl ParseInfo {
             Some(t @ Token::Term(_)) => {
                 assert!(matches!(inserted_by, InsertedBy::Scan(..)));
                 let mu_range = inserted_by.clone().scan_range();
-                let mu = &root.before[..root.before.len().saturating_sub(1)];
+                let mu = &root.before()[..root.before().len().saturating_sub(1)];
                 let child = self.table[j - 1]
                     .iter()
                     .find(|(x, _)| {
-                        x.after.last() == Some(t) && mu == x.before && x.range == mu_range
+                        x.after().last() == Some(t) && mu == x.before() && x.range() == &mu_range
                     })
                     .expect("scan child exists");
                 let child_proof = self.reconstruct_tree(j - 1, child.0, child.1);
@@ -417,16 +199,16 @@ impl ParseInfo {
                 let (range_mu, range_b) = inserted_by.clone().comp_range();
                 let child_b = self.table[j]
                     .iter()
-                    .find(|(x, _)| &x.name == t && x.after.is_empty() && x.range == range_b)
+                    .find(|(x, _)| x.name() == t && x.after().is_empty() && x.range() == &range_b)
                     .expect("child B must end at the same point");
-                let index_mu = child_b.0.range.start;
-                let name_of_b = Token::NonTerm(child_b.0.name.clone());
+                let index_mu = child_b.0.range().start;
+                let name_of_b = Token::NonTerm(child_b.0.name().to_owned());
                 let child_mu = &self.table[index_mu]
                     .iter()
                     .find(|(x, _)| {
-                        x.name == root.name
-                            && x.after.last() == Some(&name_of_b)
-                            && x.range == range_mu
+                        x.name() == root.name()
+                            && x.after().last() == Some(&name_of_b)
+                            && x.range() == &range_mu
                     })
                     .expect("there's a mu item before somewhere");
                 let proof_b = self.reconstruct_tree(j, child_b.0, child_b.1);
@@ -436,14 +218,14 @@ impl ParseInfo {
         }
     }
 
-    pub fn reconstruct(&self) -> latex::FullProof {
-        let initial = self.initial.as_ref();
+    pub fn reconstruct(&self) -> latex::FullProof<T> {
+        let initial: &str = self.initial.as_ref();
         let root = self
             .table
             .last()
             .unwrap()
             .iter()
-            .find(|(item, _)| item.name == initial && item.after.is_empty())
+            .find(|(item, _)| item.name() == initial && item.after().is_empty())
             .expect("parse had failed. if you see this you may complain about this horrid api");
 
         let proof = self.reconstruct_tree(self.table.len() - 1, root.0, root.1);
@@ -451,214 +233,133 @@ impl ParseInfo {
     }
 }
 
-pub mod latex {
-    use std::fmt::Display;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    use itertools::Itertools;
+    const S: &str = "INIT";
+    // grammars for tests operate on strings, mainly because it's sort of easy
 
-    use super::{Item, Token};
+    /// <P> ::= <S>      # the start rule
+    /// <S> ::= <S> "+" <M> | <M>
+    /// <M> ::= <M> "*" <T> | <T>
+    /// <T> ::= "1" | "2" | "3" | "4"
+    fn factored_arith() -> Grammar<String> {
+        // https://en.wikipedia.org/wiki/Earley_parser#Example
+        let mut grammar = Grammar::new();
+        grammar.add_prod("P", [nt("S")]);
 
-    #[derive(Debug)]
-    pub(super) enum Proof<'a> {
-        Comp(&'a Item, Box<Proof<'a>>, Box<Proof<'a>>),
-        Pred(&'a Item),
-        Scan(&'a Item, Box<Proof<'a>>),
+        grammar.add_prod("S", [nt("S"), t('+'), nt("M")]);
+        grammar.add_prod("S", [nt("M")]);
+
+        grammar.add_prod("M", [nt("M"), t('*'), nt("T")]);
+        grammar.add_prod("M", [nt("T")]);
+
+        grammar.add_prod("T", [t('1')]);
+        grammar.add_prod("T", [t('2')]);
+        grammar.add_prod("T", [t('3')]);
+        grammar.add_prod("T", [t('4')]);
+        grammar
     }
 
-    struct LatexProd<'a>(&'a str, &'a [Token], &'a [Token]);
-    struct LatexItem<'a>(&'a Item);
+    /// the grammar
+    /// S => aSa | bSb | \eps
+    /// is context-free. It is not proper since it includes an ε-production.
+    ///
+    /// see [https://en.wikipedia.org/wiki/Context-free_grammar]
+    fn improper_rev() -> Grammar<String> {
+        let mut grammar = Grammar::new();
 
-    impl Display for LatexProd<'_> {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(
-                f,
-                r"{} \ensuremath{{\to}} {} \ensuremath{{\bullet}} {}",
-                self.0,
-                self.1.iter().format(" "),
-                self.2.iter().rev().format(" ")
-            )
-        }
+        grammar.add_prod("INIT", [t('a'), nt("INIT"), t('a')]);
+        grammar.add_prod("INIT", [t('b'), nt("INIT"), t('b')]);
+        grammar.add_prod("INIT", []);
+
+        grammar
     }
 
-    impl Display for LatexItem<'_> {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(
-                f,
-                r"[{}, {}, {}]",
-                self.0.range.start,
-                self.0.range.end,
-                LatexProd(&self.0.name, &self.0.before, &self.0.after)
-            )
-        }
+    /// S ::= aSa | bSb | \eps | a | b
+    ///
+    /// see [https://en.wikipedia.org/wiki/Context-free_grammar]
+    fn palindrome() -> Grammar<String> {
+        let mut grammar = Grammar::new();
+
+        grammar.add_prod("INIT", [t('a'), nt("INIT"), t('a')]);
+        grammar.add_prod("INIT", [t('b'), nt("INIT"), t('b')]);
+        grammar.add_prod("INIT", [t('b')]);
+        grammar.add_prod("INIT", [t('a')]);
+        grammar.add_prod("INIT", []);
+
+        grammar
     }
 
-    impl Display for Proof<'_> {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            match self {
-                Proof::Comp(item, mu, b) => {
-                    writeln!(
-                        f,
-                        r"\bininf{{ {item} }} {{\comp}} {{ ",
-                        item = LatexItem(item)
-                    )?;
-                    writeln!(f, "{mu}")?;
-                    writeln!(f, r"}} {{")?;
-                    writeln!(f, "{b}")?;
-                    writeln!(f, r"}}")?;
-                }
-                Proof::Pred(item) => {
-                    writeln!(f, r"\uninf{{ {} }} {{ \pred }} {{ ", LatexItem(item))?;
-                    writeln!(
-                        f,
-                        r"\axiominf{{ {} }}{{ }}",
-                        LatexProd(&item.name, &item.before, &item.after),
-                    )?;
-                    writeln!(f, r"}}")?;
-                }
-                Proof::Scan(item, mu) => {
-                    writeln!(
-                        f,
-                        r"\bininf{{ {item} }} {{\comp}} {{ ",
-                        item = LatexItem(item)
-                    )?;
-                    writeln!(f, "{mu}")?;
-                    writeln!(f, r"}} {{")?;
-                    writeln!(
-                        f,
-                        r" \axiominf{{ [{}, {}, {}] }} {{ }} ",
-                        item.range.end - 1,
-                        item.range.end,
-                        item.before.last().unwrap()
-                    )?;
-                    writeln!(f, r"}}")?;
-                }
+    fn well_formed_parentheses() -> Grammar<String> {
+        let mut grammar = Grammar::new();
+        grammar.add_prod(S, [nt(S), nt(S)]);
+        grammar.add_prod(S, [t("("), nt(S), t(")")]);
+        grammar.add_prod(S, [t("("), t(")")]);
+        grammar
+    }
+
+    fn input(x: &str) -> impl Iterator<Item = String> + '_ {
+        x.chars()
+            .filter(|x| !x.is_whitespace())
+            .map(|x| x.to_string())
+    }
+
+    macro_rules! test_grammar {
+        ($name:ident, $grammar:expr, $input:expr) => {
+            test_grammar!($name, $grammar, $input, "INIT");
+        };
+        ($name:ident, $grammar:expr, $input:expr, $initial:expr) => {
+            #[test]
+            fn $name() {
+                let grammar = $grammar();
+                let input = input($input);
+                let parser = Parser::new(input, grammar, $initial);
+                let result = parser.parse();
+                assert!(result.is_ok());
             }
-            Ok(())
-        }
-    }
-
-    pub struct FullProof<'a>(pub(super) Proof<'a>);
-    impl Display for FullProof<'_> {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            writeln!(
-                f,
-                r#"
-                \begin{{inctext}}[left border=20pt, right border=20pt,top border=30pt, bottom border=30pt]
-                \begin{{bprooftree}}
-                {body}
-                \end{{bprooftree}}
-                \end{{inctext}}
-                "#,
-                body = self.0
-            )
-        }
-    }
-
-    pub enum ParseTree<'a> {
-        Terminal(&'a str),
-        NonTerminal(&'a str, Vec<ParseTree<'a>>),
-    }
-    pub struct FullParseTree<'a>(pub(super) ParseTree<'a>);
-
-    impl<'a> ParseTree<'a> {
-        fn from_proof(proof: Proof<'a>, rule: &'a str, mut sub: Vec<ParseTree<'a>>) -> Self {
-            match proof {
-                Proof::Pred(_) => todo!("not sure if i can do anything here"),
-                Proof::Comp(item, mu, b) => {
-                    let b_name = item.before.last().unwrap().nonterm();
-
-                    let parse_tree_b = ParseTree::from_proof(*b, b_name, Vec::new());
-                    sub.push(parse_tree_b);
-                    if item.before.len() == 1 {
-                        sub.reverse();
-                        ParseTree::NonTerminal(rule, sub)
-                    } else {
-                        ParseTree::from_proof(*mu, rule, sub)
-                    }
-                }
-                Proof::Scan(item, mu) => {
-                    let a_name = item.before.last().unwrap().term();
-                    sub.push(ParseTree::Terminal(a_name));
-                    if item.before.len() == 1 {
-                        sub.reverse();
-                        ParseTree::NonTerminal(rule, sub)
-                    } else {
-                        ParseTree::from_proof(*mu, rule, sub)
-                    }
-                }
+        };
+        (FAIL $name:ident, $grammar:expr, $input:expr) => {
+            test_grammar!(FAIL $name, $grammar, $input, "INIT");
+        };
+        (FAIL $name:ident, $grammar:expr, $input:expr, $initial:expr) => {
+            #[test]
+            fn $name() {
+                let grammar = $grammar();
+                let input = input($input);
+                let parser = Parser::new(input, grammar, $initial);
+                let result = parser.parse();
+                assert!(result.is_err());
             }
-        }
+        };
     }
 
-    impl<'a> From<Proof<'a>> for ParseTree<'a> {
-        fn from(value: Proof<'a>) -> Self {
-            match value {
-                Proof::Comp(item, _, _) | Proof::Pred(item) | Proof::Scan(item, _) => {
-                    Self::from_proof(value, &item.name, Vec::new())
-                }
-            }
-        }
-    }
+    test_grammar!(factored_arith1, factored_arith, "2 + 3 * 4", "P");
+    test_grammar!(FAIL factored_arith2, factored_arith, "2 + * 4", "P");
+    test_grammar!(
+        factored_arith3,
+        factored_arith,
+        "1 + 2 + 3 + 4 * 3 * 2 * 1 + 1",
+        "P"
+    );
 
-    impl<'a> From<FullProof<'a>> for FullParseTree<'a> {
-        fn from(value: FullProof<'a>) -> Self {
-            FullParseTree(value.0.into())
-        }
-    }
+    test_grammar!(improper_rev_empty, improper_rev, "");
+    test_grammar!(improper_rev_easy, improper_rev, "aabbaa");
+    test_grammar!(FAIL improper_rev_easy_fail, improper_rev, "aabaa");
 
-    impl Display for ParseTree<'_> {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            match self {
-                ParseTree::Terminal(s) => write!(f, "[{{{s}}}]"),
-                ParseTree::NonTerminal(rule, children) => {
-                    write!(f, "[{rule}  {}]", children.iter().format(""))?;
-                    Ok(())
-                }
-            }
-        }
-    }
+    test_grammar!(palindrome_empty, palindrome, "");
+    test_grammar!(palindrome_easy, palindrome, "aabbaa");
+    test_grammar!(palindrome_not_rev_concat, palindrome, "aabaa");
+    test_grammar!(FAIL palindrome_easy_fail, palindrome, "abaa");
+    test_grammar!(FAIL palindrome_easy_fail2, palindrome, "ab");
 
-    impl Display for FullParseTree<'_> {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            writeln!(
-                f,
-                r#"
-                \begin{{inctext}}[left border=20pt, right border=20pt,top border=30pt, bottom border=30pt]
-                \begin{{forest}} {body} \end{{forest}}
-
-                \end{{inctext}}
-                "#,
-                body = self.0
-            )
-        }
-    }
-
-    pub struct Grammar<'a>(pub(super) &'a super::Grammar);
-    impl Display for Grammar<'_> {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            writeln!(
-                f,
-                r#"
-                \begin{{inctext}}[left border=20pt, right border=20pt,top border=30pt, bottom border=30pt]
-                "#,
-            )?;
-            // writeln!(f, r"\section*{{Grammar}}")?;
-            writeln!(f, r"\begin{{lstlisting}}")?;
-
-            for (rule, productions) in &self.0.productions {
-                for production in productions {
-                    writeln!(f, r"{rule} -> {}", production.iter().format(" "))?;
-                }
-            }
-
-            writeln!(f, r"\end{{lstlisting}}")?;
-            writeln!(
-                f,
-                r#"
-                \end{{inctext}}"#
-            )?;
-
-            Ok(())
-        }
-    }
+    test_grammar!(well_formed_parentheses1, well_formed_parentheses, "()");
+    test_grammar!(
+        well_formed_parentheses2,
+        well_formed_parentheses,
+        "(((((())))))"
+    );
+    // test_grammar!(FAIL well_formed_parentheses_fail1, well_formed_parentheses, "((((())))))");
+    test_grammar!(FAIL well_formed_parentheses_fail2, well_formed_parentheses, "((((())))");
 }
