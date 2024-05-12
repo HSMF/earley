@@ -7,6 +7,9 @@ use self::latex::Proof;
 pub mod latex;
 mod table;
 use table::Table;
+pub mod python;
+pub use python::earley;
+
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum Token<T> {

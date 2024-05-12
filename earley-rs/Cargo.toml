@@ -3,6 +3,10 @@ name = "earley"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+
 [[bin]]
 name = "earley"
 path = "src/main.rs"
@@ -12,4 +16,5 @@ path = "src/main.rs"
 [dependencies]
 anyhow = "1.0.83"
 itertools = "0.12.1"
+pyo3 = { version = "0.21.2", features = ["extension-module"] }
 thiserror = "1.0.60"
