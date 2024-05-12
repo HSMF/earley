@@ -28,6 +28,9 @@ Currently you will have to edit [`src/main.rs`](./src/main.rs) to change the gra
   ```
 
 4. use `earley` in code!
+
+  For a more fleshed out example, see [lua.py](./lua.py)
+
   ```python
   from earley import Grammar, Token, PrefixParser, ParseError, Term, NonTerm
 
