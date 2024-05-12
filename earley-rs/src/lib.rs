@@ -1,4 +1,7 @@
-use std::{collections::HashMap, fmt::Display};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Display,
+};
 
 use table::Item;
 
@@ -9,7 +12,6 @@ mod table;
 use table::Table;
 pub mod python;
 pub use python::earley;
-
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum Token<T> {
@@ -251,6 +253,10 @@ where
             table: self.table.table.clone(),
             initial: self.table.initial.clone(),
         })
+    }
+
+    pub fn legal_tokens(&self) -> HashSet<T> {
+        self.table.legal_tokens()
     }
 }
 

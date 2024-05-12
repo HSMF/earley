@@ -1,4 +1,7 @@
-use std::{collections::HashMap, fmt::Display};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Display,
+};
 
 use itertools::Itertools;
 
@@ -97,11 +100,7 @@ impl<T> Table<T>
 where
     T: Clone + std::cmp::Eq + std::hash::Hash + Display,
 {
-    pub fn new(
-        grammar: Grammar<T>,
-        initial: impl AsRef<str>,
-        size_hint: usize,
-    ) -> Self {
+    pub fn new(grammar: Grammar<T>, initial: impl AsRef<str>, size_hint: usize) -> Self {
         let initials = grammar
             .productions
             .get(initial.as_ref())
@@ -296,9 +295,22 @@ where
         // an empty production can be applied immediately after the `pred` phase, at which point,
         // it could introduce more reductions for the comp_phase
 
-
         self.table.push(cur_state);
     }
 
-    
+    pub(super) fn legal_tokens(&self) -> HashSet<T> {
+        let Some(last) = self.table.last() else {
+            return HashSet::new();
+        };
+
+        let mut out = HashSet::new();
+        for item in last.keys() {
+            let Some(Token::Term(hd)) = item.after().last() else {
+                continue;
+            };
+            out.insert(hd.clone());
+        }
+
+        out
+    }
 }
