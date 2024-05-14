@@ -137,7 +137,6 @@ where
         out
     }
 
-
     fn scan_phase(&mut self, j: usize, token: T) -> HashMap<Item<T>, InsertedBy> {
         let mut cur_state = HashMap::new();
 
@@ -166,6 +165,17 @@ where
         cur_state
     }
 
+    fn get_table_or_current<'a>(
+        &'a self,
+        cur_state: &'a HashMap<Item<T>, InsertedBy>,
+        idx: usize,
+    ) -> &HashMap<Item<T>, InsertedBy> {
+        if idx == self.table.len() {
+            return cur_state;
+        }
+        &self.table[idx]
+    }
+
     fn comp_phase_loop(
         &mut self,
         _: usize,
@@ -183,7 +193,7 @@ where
                 continue;
             }
             let right_rule = Token::NonTerm(name.clone());
-            let left_proofs = &self.table[right_range.start];
+            let left_proofs = self.get_table_or_current(cur_state, right_range.start);
             for (candidate, _) in left_proofs.iter() {
                 let Item {
                     range: left_range,
@@ -281,22 +291,25 @@ where
         // # phase 1 : scan
         // use axiom j-1,j,i[j-1] to advance in state j-1
         // -> keep advanced (scan)
-        let cur_state = self.scan_phase(j, token);
+        let mut cur_state = self.scan_phase(j, token);
 
-        // # phase 2: comp
-        // for all item completed
-        //   comp with item
-        // if added some
-        //   restart phase 2
-        let cur_state = self.comp_phase(j, cur_state);
+        loop {
+            let init_len = cur_state.len();
+            // # phase 2: comp
+            // for all item completed
+            //   comp with item
+            // if added some
+            //   restart phase 2
+            cur_state = self.comp_phase(j, cur_state);
 
-        // phase 3:
-        // pred
-        let cur_state = self.pred_phase(j, cur_state);
+            // phase 3:
+            // pred
+            cur_state = self.pred_phase(j, cur_state);
 
-        // TODO: fix empty productions
-        // an empty production can be applied immediately after the `pred` phase, at which point,
-        // it could introduce more reductions for the comp_phase
+            if init_len == cur_state.len() {
+                break;
+            }
+        }
 
         self.table.push(cur_state);
     }
