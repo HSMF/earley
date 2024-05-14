@@ -13,8 +13,6 @@ use table::Table;
 
 #[cfg(feature = "py")]
 pub mod python;
-#[cfg(feature = "py")]
-pub use python::earley;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum Token<T> {
