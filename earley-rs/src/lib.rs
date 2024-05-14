@@ -10,7 +10,10 @@ use self::latex::Proof;
 pub mod latex;
 mod table;
 use table::Table;
+
+#[cfg(feature = "py")]
 pub mod python;
+#[cfg(feature = "py")]
 pub use python::earley;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]

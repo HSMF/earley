@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
-    fmt::Display,
+    fmt::{Debug, Display},
 };
 
 use itertools::Itertools;
@@ -96,6 +96,18 @@ pub struct Table<T> {
     pub(super) initial: String,
 }
 
+impl<T: Debug> Debug for Table<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (j, el) in self.table.iter().enumerate() {
+            for it in el.keys() {
+                writeln!(f, "inserting at {j}: {it:?}")?;
+            }
+            writeln!(f)?;
+        }
+        Ok(())
+    }
+}
+
 impl<T> Table<T>
 where
     T: Clone + std::cmp::Eq + std::hash::Hash + Display,
@@ -125,15 +137,6 @@ where
         out
     }
 
-    #[allow(dead_code)]
-    pub fn print_table(&self) {
-        for (j, el) in self.table.iter().enumerate() {
-            for it in el.keys() {
-                println!("inserting at {j}: {it}");
-            }
-            println!();
-        }
-    }
 
     fn scan_phase(&mut self, j: usize, token: T) -> HashMap<Item<T>, InsertedBy> {
         let mut cur_state = HashMap::new();

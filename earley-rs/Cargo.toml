@@ -3,6 +3,10 @@ name = "earley"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = ["py"]
+py = ["dep:pyo3"]
+
 [lib]
 crate-type = ["cdylib", "rlib"]
 
@@ -16,5 +20,5 @@ path = "src/main.rs"
 [dependencies]
 anyhow = "1.0.83"
 itertools = "0.12.1"
-pyo3 = { version = "0.21.2", features = ["extension-module"] }
+pyo3 = { version = "0.21.2", features = ["extension-module"], optional=true }
 thiserror = "1.0.60"
